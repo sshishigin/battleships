@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8"/>
+    <title>Chat Room</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.1/dist/css/bootstrap.min.css" integrity="sha384-F3w7mX95PdgyTmZZMECAngseQB83DfGTowi0iMjiWaeVhAn4FJkqJByhZMI3AhiU" crossorigin="anonymous">
+</head>
+
+<body>
+<div class="row row-cols-2" id="main">
+            <script>
+              function Matrix(length) {
+              var arr = new Array(length || 0),
+                  i = length;
+
+              if (arguments.length > 1) {
+                  var args = Array.prototype.slice.call(arguments, 1);
+                  while (i--) arr[length - 1 - i] = Matrix.apply(this, args);
+              }
+
+              return arr;
+          }
+
+          battlefield = Matrix(10, 10)
+
+          function tableCreate() {
+              var body = document.body;
+              col = document.createElement('game')
+              col.setAttribute('class', "col-md-4")
+              tbl = document.createElement('table');
+              tbl.style.width = '100px';
+              tbl.style.border = '1px solid black';
+
+              for (var i = 0; i < battlefield.length; i++) {
+                  var tr = tbl.insertRow();
+                  for (var j = 0; j < battlefield[0].length; j++) {
+                      var td = tr.insertCell();
+                      td.appendChild(document.createTextNode(`${i}:${j}`));
+                      td.style.border = '1px solid black';
+                      td.id = `${i}:${j}`
+                      td.onclick = function(e){click_test(e.target.textContent)}
+                  }
+              }
+              body.appendChild(col);
+              col.appendChild(tbl)
+          }
+          tableCreate();
+
+          document.querySelectorAll('td')
+
+          function click_test(xy) {
+              console.log('This is')
+              console.log(xy)
+          }
+
+          function tableUpdate() {
+
+          }
+            </script>
+
+            <div class="col-md-4" id="chat-section">
+              <div class="container">
+                <textarea id="chat-log"></textarea><br>
+                <input id="chat-message-input" type="text"><br>
+                <input id="chat-message-submit" type="button" value="Send">
+                {{ room_name|json_script:"room-name" }}
+                {{ user.username|json_script:"username"}}
+              </div>
+            </div>
+            <script>
+                {#const username = JSON.parse(document.getElementById('username').textContent);#}
+                const roomName = JSON.parse(document.getElementById('room-name').textContent);
+
+                // Websocket for Battleships
+                const chatSocket = new WebSocket(
+                    'ws://'
+                    + window.location.host
+                    + '/ws/chat/'
+                    + roomName
+                    + '/'
+                );
+                chatSocket.onmessage = function(e) {
+                    const data = JSON.parse(e.data);
+                    console.log(data)
+                    document.querySelector('#chat-log').value += (data.username + ": " + data.message + '\n');
+                };
+                chatSocket.onopen = function (e) {
+                  chatSocket.send(JSON.stringify({
+                        'message': 'init',
+                    }));
+                }
+                chatSocket.onclose = function(e) {
+                    console.error('Chat socket closed unexpectedly');
+                    document.querySelector('#chat-log').value = null
+
+                };
+
+                document.querySelector('#chat-message-input').focus();
+                document.querySelector('#chat-message-input').onkeyup = function(e) {
+                    if (e.keyCode === 13) {  // enter, return
+                        document.querySelector('#chat-message-submit').click();
+                    }
+                };
+
+                document.querySelector('#chat-message-submit').onclick = function(e) {
+                    const messageInputDom = document.querySelector('#chat-message-input');
+                    const message = messageInputDom.value;
+                    chatSocket.send(JSON.stringify({
+                        'message': message,
+                    }));
+                    messageInputDom.value = '';
+                };
+                // Websocket for Battleships
+                {#const gameSocket = new WebSocket(#}
+                {#      'ws://'#}
+                {#    + window.location.host#}
+                {#    + '/ws/game/'#}
+                {#    + roomName#}
+                {#    + '/'#}
+                {#)#}
+
+            </script>
+            <script>
+              function findShip(x, y, field, visited, ships) {
+              // should not be in contact with other ship by corner
+              if (
+                  (field[x - 1] && (field[x - 1][y - 1] === 1 || field[x - 1][y + 1] === 1)) ||
+                  (field[x + 1] && (field[x + 1][y - 1] === 1 || field[x + 1][y + 1] === 1))
+                ) return false;
+
+              let k = 0, l = 0, m = 0;
+              for (k = 0; k < ships.length; k += 1) {
+                // horizontal
+                for (l = 0; l < ships.length; l += 1) {
+                  if (!field[x][y + l] || field[x][y + l] === 0) break;
+                  // The ship cannot overlap or be in contact with any other ship
+                  if (l > 0 && field[x + 1] && field[x + 1][y + l] === 1) return false;
+                  visited[`(${x},${y + l})`] = true;
+                }
+                // vertical
+                for (m = 0; m < ships.length; m += 1) {
+                  if (!field[x + m] || field[x + m][y] === 0) break;
+                  // The ship cannot overlap or be in contact with any other ship
+                  if (m > 0 && field[x + m][y + 1] === 1) return false;
+                  visited[`(${x + m},${y})`] = true;
+                }
+              }
+              ships[Math.max(l, m) - 1][1] -= 1;
+              return !(l > 1 && m > 1);
+            }
+            function validateBattlefield(field) {
+              const ships = [[1, 4], [2, 3], [3, 2], [4, 1]];
+              const visited = {};
+              for (let i = 0; i < field.length; i += 1) {
+                for (let j = 0; j < field[i].length; j += 1) {
+                  if (ships.every(val => val[1] === 0) && field[i][j] === 1) return false;
+                  if (!visited[`(${i},${j})`] && field[i][j] === 1) {
+                    if (!findShip(i, j, field, visited, ships)) return false;
+                  }
+                }
+              }
+              return ships.every(val => val[1] === 0);
+            }
+            </script>
+    </div>
+</body>
+</html>
